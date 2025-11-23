@@ -13,6 +13,7 @@ const state = {
   dragPointerStart: { x: 0, y: 0 },
   selectedNodeId: null,
   linkMode: null, // { fromId, type }
+  editor: { isNew: false, currentId: null },
   bubbles: [],
   nodes: [],
   links: []
@@ -27,9 +28,20 @@ const detailContent = document.getElementById("detail-content");
 const hiddenNodeContentContainer = document.getElementById("hidden-node-content-container");
 const textMapContent = document.getElementById("text-map-content");
 
+// Editor elements
+const btnNewNode = document.getElementById("btn-new-node");
+const btnSaveNode = document.getElementById("btn-save-node");
+const btnDeleteNode = document.getElementById("btn-delete-node");
+const btnDownloadJson = document.getElementById("btn-download-json");
+const editNodeIdInput = document.getElementById("edit-node-id");
+const editNodeTitleInput = document.getElementById("edit-node-title");
+const editNodeSummaryInput = document.getElementById("edit-node-summary");
+const editNodeContentInput = document.getElementById("edit-node-content");
+const editBubblesContainer = document.getElementById("edit-bubbles-container");
+
 let linkSvg;
 
-// Utility: load initial data
+// Load initial data from the embedded JSON
 function loadInitialData() {
   const el = document.getElementById("initial-data");
   const json = el.textContent || el.innerText;
@@ -37,11 +49,9 @@ function loadInitialData() {
 
   state.bubbles = data.bubbles.map(b => ({
     ...b,
-    // Precompute diameter for DOM
     diameter: b.radius * 2
   }));
 
-  // Give each node a default position in world space
   const nodePositions = [
     { x: -200, y: -420 },
     { x: -220, y: -230 },
@@ -69,11 +79,11 @@ function loadInitialData() {
   state.links = data.links.slice();
 }
 
-// Build DOM for bubbles and nodes
+// Build canvas items
 function buildCanvas() {
   canvasInner.innerHTML = "";
 
-  // Create SVG layer for links
+  // create svg link layer
   linkSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   linkSvg.classList.add("link-layer");
   linkSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
@@ -81,7 +91,7 @@ function buildCanvas() {
   linkSvg.setAttribute("height", "100%");
   canvasInner.appendChild(linkSvg);
 
-  // Bubbles
+  // bubbles
   state.bubbles.forEach(bubble => {
     const el = document.createElement("div");
     el.className = "bubble";
@@ -99,7 +109,7 @@ function buildCanvas() {
     canvasInner.appendChild(el);
   });
 
-  // Nodes
+  // nodes
   state.nodes.forEach(node => {
     const el = document.createElement("div");
     el.className = "node";
@@ -112,7 +122,7 @@ function buildCanvas() {
 
     const summaryEl = document.createElement("p");
     summaryEl.className = "node-summary";
-    summaryEl.textContent = node.summary;
+    summaryEl.textContent = node.summary || "";
     el.appendChild(summaryEl);
 
     if (node.bubbles && node.bubbles.length) {
@@ -126,11 +136,10 @@ function buildCanvas() {
     el.style.left = node.x + "px";
     el.style.top = node.y + "px";
 
-    // Node events
     el.addEventListener("mousedown", onNodeMouseDown);
     el.addEventListener("click", e => {
       e.stopPropagation();
-      selectNode(node.id);
+      handleNodeClickFromCanvas(node.id);
     });
     el.addEventListener("contextmenu", e => {
       e.preventDefault();
@@ -145,12 +154,11 @@ function buildCanvas() {
   rebuildLinks();
 }
 
-// Build left sidebar
+// build left sidebar
 function buildSidebars() {
   bubbleFoldersContainer.innerHTML = "";
   allNodesList.innerHTML = "";
 
-  // Map bubble -> nodes
   const bubbleMap = {};
   state.bubbles.forEach(b => {
     bubbleMap[b.id] = [];
@@ -167,7 +175,6 @@ function buildSidebars() {
     }
   });
 
-  // Build bubble folders
   state.bubbles.forEach(bubble => {
     const folder = document.createElement("div");
     folder.className = "folder";
@@ -205,7 +212,6 @@ function buildSidebars() {
 
     body.appendChild(list);
 
-    // simple collapse/expand
     let collapsed = false;
     header.addEventListener("click", () => {
       collapsed = !collapsed;
@@ -217,7 +223,7 @@ function buildSidebars() {
     bubbleFoldersContainer.appendChild(folder);
   });
 
-  // All nodes flat list
+  // flat list
   state.nodes.forEach(node => {
     const li = document.createElement("li");
     const btn = document.createElement("button");
@@ -230,7 +236,7 @@ function buildSidebars() {
   });
 }
 
-// Hidden node dump for LLMs
+// hidden dump for crawlers
 function buildHiddenContentDump() {
   hiddenNodeContentContainer.innerHTML = "";
   state.nodes.forEach(node => {
@@ -244,13 +250,13 @@ function buildHiddenContentDump() {
       "Bubbles: " + (node.bubbles && node.bubbles.length ? node.bubbles.join(", ") : "none");
     wrapper.appendChild(bubbleInfo);
     const contentDiv = document.createElement("div");
-    contentDiv.innerHTML = node.contentHtml;
+    contentDiv.innerHTML = node.contentHtml || "";
     wrapper.appendChild(contentDiv);
     hiddenNodeContentContainer.appendChild(wrapper);
   });
 }
 
-// Text map to help dumb extractors
+// text map for lazy extractors
 function buildTextMap() {
   textMapContent.innerHTML = "";
 
@@ -287,14 +293,12 @@ function buildTextMap() {
   textMapContent.appendChild(linksSection);
 }
 
-// Select and display node
+// Select node and update viewer + editor
 function selectNode(nodeId) {
   const node = state.nodes.find(n => n.id === nodeId);
   if (!node) return;
-
   state.selectedNodeId = nodeId;
 
-  // Highlight in canvas
   document.querySelectorAll(".node").forEach(el => {
     if (el.dataset.nodeId === nodeId) {
       el.style.borderColor = "rgba(251, 191, 36, 0.95)";
@@ -305,16 +309,13 @@ function selectNode(nodeId) {
     }
   });
 
-  // Highlight in left list
   document.querySelectorAll(".node-button").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.nodeId === nodeId);
   });
 
   detailTitle.textContent = node.title;
 
-  // Build content with hyperlinks to linked nodes
   const relatedLinks = state.links.filter(link => link.from === node.id);
-
   let linksHtml = "";
   if (relatedLinks.length) {
     const items = relatedLinks
@@ -328,15 +329,23 @@ function selectNode(nodeId) {
     linksHtml = `<section><h4>Linked nodes</h4><ul>${items}</ul></section>`;
   }
 
-  detailContent.innerHTML = node.contentHtml + linksHtml;
+  detailContent.innerHTML = (node.contentHtml || "") + linksHtml;
+
+  fillEditorFromNode(node);
 }
 
-// Move canvas according to state
+function handleNodeClickFromCanvas(nodeId) {
+  // If user is in linkMode, let that logic handle first
+  if (state.linkMode) return;
+  selectNode(nodeId);
+}
+
+// Canvas transform
 function updateCanvasTransform() {
   canvasInner.style.transform = `translate(${state.offsetX}px, ${state.offsetY}px) scale(${state.scale})`;
 }
 
-// Rebuild SVG links between node centers
+// Rebuild SVG links
 function rebuildLinks() {
   if (!linkSvg) return;
   linkSvg.innerHTML = "";
@@ -350,7 +359,7 @@ function rebuildLinks() {
     line.classList.add("link-line");
     line.dataset.fromId = fromNode.id;
     line.dataset.toId = toNode.id;
-    // Work in the same world coordinate system as nodes
+
     const x1 = fromNode.x + 100;
     const y1 = fromNode.y + 30;
     const x2 = toNode.x + 100;
@@ -364,14 +373,15 @@ function rebuildLinks() {
   });
 }
 
-// Mouse wheel zoom
+/* CANVAS INTERACTION */
+
+// zoom
 canvas.addEventListener("wheel", e => {
   e.preventDefault();
   const delta = e.deltaY;
   const zoomFactor = delta > 0 ? 0.9 : 1.1;
   const newScale = Math.min(2.5, Math.max(0.3, state.scale * zoomFactor));
 
-  // Zoom relative to pointer
   const rect = canvas.getBoundingClientRect();
   const cx = e.clientX - rect.left - rect.width / 2;
   const cy = e.clientY - rect.top - rect.height / 2;
@@ -383,9 +393,8 @@ canvas.addEventListener("wheel", e => {
   updateCanvasTransform();
 });
 
-// Canvas pan with left mouse on empty space
+// pan on empty drag
 canvas.addEventListener("mousedown", e => {
-  // Only start pan if click is not on a node
   const target = e.target;
   if (target.closest(".node")) return;
   state.isPanning = true;
@@ -425,7 +434,7 @@ window.addEventListener("mouseup", () => {
   state.draggingNodeId = null;
 });
 
-// Node drag start
+// node drag
 function onNodeMouseDown(e) {
   e.stopPropagation();
   const nodeId = e.currentTarget.dataset.nodeId;
@@ -436,12 +445,12 @@ function onNodeMouseDown(e) {
   state.dragPointerStart = { x: e.clientX, y: e.clientY };
 }
 
-// Disable native context menu on canvas
+// disable native context menu inside canvas
 canvas.addEventListener("contextmenu", e => {
   e.preventDefault();
 });
 
-// Keyboard pan (WASD + arrows)
+// keyboard pan
 document.addEventListener("keydown", e => {
   const step = 40;
   let moved = false;
@@ -466,7 +475,8 @@ document.addEventListener("keydown", e => {
   }
 });
 
-// Link context menu on nodes
+/* CONTEXT MENU + LINK CREATION */
+
 let contextMenuEl = null;
 
 function openNodeContextMenu(x, y, nodeId) {
@@ -517,7 +527,7 @@ function closeContextMenu() {
   }
 }
 
-// Complete link when linkMode is active and user clicks a node
+// link completion
 canvasInner.addEventListener("click", e => {
   if (!state.linkMode) return;
   const nodeEl = e.target.closest(".node");
@@ -540,13 +550,12 @@ canvasInner.addEventListener("click", e => {
   state.linkMode = null;
   rebuildLinks();
 
-  // If current detail matches fromId, refresh links section
-  if (state.selectedNodeId === nodeEl.dataset.nodeId || state.selectedNodeId) {
+  if (state.selectedNodeId) {
     selectNode(state.selectedNodeId);
   }
 });
 
-// Handle hyperlink clicks inside detail panel
+// hyperlinks inside detail panel
 detailContent.addEventListener("click", e => {
   const link = e.target.closest("a[data-node-id]");
   if (!link) return;
@@ -556,7 +565,6 @@ detailContent.addEventListener("click", e => {
   scrollNodeIntoView(nodeId);
 });
 
-// Scroll canvas so that given node is near center (approximate)
 function scrollNodeIntoView(nodeId) {
   const node = state.nodes.find(n => n.id === nodeId);
   if (!node) return;
@@ -565,14 +573,192 @@ function scrollNodeIntoView(nodeId) {
   updateCanvasTransform();
 }
 
-// Init
+/* EDITOR HELPERS */
+
+function buildEditorBubbleCheckboxes() {
+  editBubblesContainer.innerHTML = "";
+  state.bubbles.forEach(bubble => {
+    const label = document.createElement("label");
+    label.className = "checkbox-label";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = bubble.id;
+    cb.name = "bubble-checkbox";
+    const span = document.createElement("span");
+    span.textContent = bubble.title;
+    label.appendChild(cb);
+    label.appendChild(span);
+    editBubblesContainer.appendChild(label);
+  });
+}
+
+function setEditorBubbleSelection(selectedIds) {
+  const set = new Set(selectedIds || []);
+  editBubblesContainer
+    .querySelectorAll('input[name="bubble-checkbox"]')
+    .forEach(cb => {
+      cb.checked = set.has(cb.value);
+    });
+}
+
+function getEditorSelectedBubbleIds() {
+  const ids = [];
+  editBubblesContainer
+    .querySelectorAll('input[name="bubble-checkbox"]')
+    .forEach(cb => {
+      if (cb.checked) ids.push(cb.value);
+    });
+  return ids;
+}
+
+function clearEditorFields() {
+  editNodeIdInput.value = "";
+  editNodeTitleInput.value = "";
+  editNodeSummaryInput.value = "";
+  editNodeContentInput.value = "";
+  setEditorBubbleSelection([]);
+  state.editor = { isNew: false, currentId: null };
+}
+
+function fillEditorFromNode(node) {
+  editNodeIdInput.value = node.id;
+  editNodeTitleInput.value = node.title || "";
+  editNodeSummaryInput.value = node.summary || "";
+  editNodeContentInput.value = node.contentHtml || "";
+  setEditorBubbleSelection(node.bubbles || []);
+  state.editor = { isNew: false, currentId: node.id };
+}
+
+/* EDITOR BUTTON HANDLERS */
+
+btnNewNode.addEventListener("click", () => {
+  const newId = "node-" + Date.now();
+  editNodeIdInput.value = newId;
+  editNodeTitleInput.value = "";
+  editNodeSummaryInput.value = "";
+  editNodeContentInput.value = "";
+  setEditorBubbleSelection([]);
+  state.editor = { isNew: true, currentId: newId };
+  state.selectedNodeId = null;
+  detailTitle.textContent = "New node";
+  detailContent.innerHTML = "<p>Fill out the editor below and press <strong>Save node</strong>.</p>";
+  document.querySelectorAll(".node").forEach(el => {
+    el.style.borderColor = "rgba(148, 163, 184, 0.8)";
+    el.style.boxShadow = "0 10px 25px rgba(15, 23, 42, 0.85)";
+  });
+  document.querySelectorAll(".node-button").forEach(btn => btn.classList.remove("active"));
+});
+
+btnSaveNode.addEventListener("click", () => {
+  let id = (editNodeIdInput.value || "").trim();
+  const title = (editNodeTitleInput.value || "").trim();
+  const summary = (editNodeSummaryInput.value || "").trim();
+  const contentHtml = editNodeContentInput.value || "";
+  const bubbles = getEditorSelectedBubbleIds();
+
+  if (!title) {
+    alert("Title is required.");
+    return;
+  }
+
+  if (!id) {
+    id = "node-" + Date.now();
+    editNodeIdInput.value = id;
+  }
+
+  const existing = state.nodes.find(n => n.id === id);
+
+  if (!existing || state.editor.isNew) {
+    const worldX = -state.offsetX / state.scale;
+    const worldY = -state.offsetY / state.scale;
+    const newNode = {
+      id,
+      title,
+      summary,
+      contentHtml,
+      bubbles,
+      x: worldX,
+      y: worldY
+    };
+    state.nodes.push(newNode);
+    state.editor = { isNew: false, currentId: id };
+  } else {
+    existing.title = title;
+    existing.summary = summary;
+    existing.contentHtml = contentHtml;
+    existing.bubbles = bubbles;
+  }
+
+  state.selectedNodeId = id;
+
+  buildCanvas();
+  buildSidebars();
+  buildHiddenContentDump();
+  buildTextMap();
+  selectNode(id);
+});
+
+btnDeleteNode.addEventListener("click", () => {
+  const id = (editNodeIdInput.value || "").trim();
+  if (!id) {
+    alert("No node selected to delete.");
+    return;
+  }
+  const node = state.nodes.find(n => n.id === id);
+  if (!node) {
+    alert("Node not found in current graph.");
+    return;
+  }
+  const ok = window.confirm(`Delete node "${node.title}" and its links?`);
+  if (!ok) return;
+
+  state.nodes = state.nodes.filter(n => n.id !== id);
+  state.links = state.links.filter(l => l.from !== id && l.to !== id);
+
+  clearEditorFields();
+  state.selectedNodeId = null;
+  detailTitle.textContent = "Select a node";
+  detailContent.innerHTML = "<p>Click any node or folder entry to view its content here.</p>";
+
+  buildCanvas();
+  buildSidebars();
+  buildHiddenContentDump();
+  buildTextMap();
+});
+
+btnDownloadJson.addEventListener("click", () => {
+  const exportBubbles = state.bubbles.map(({ diameter, ...rest }) => rest);
+  const exportNodes = state.nodes.map(({ x, y, ...rest }) => rest);
+  const exportLinks = state.links.slice();
+
+  const payload = {
+    bubbles: exportBubbles,
+    nodes: exportNodes,
+    links: exportLinks
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json"
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "graph-data.json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+/* INIT */
+
 loadInitialData();
 buildCanvas();
 buildSidebars();
 buildHiddenContentDump();
 buildTextMap();
+buildEditorBubbleCheckboxes();
 
-// Select a default node
 if (state.nodes.length) {
   selectNode(state.nodes[0].id);
 }
