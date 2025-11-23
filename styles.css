@@ -54,7 +54,7 @@ body {
 }
 
 .sidebar-right {
-  width: 320px;
+  width: 340px;
 }
 
 .sidebar-title {
@@ -156,7 +156,7 @@ body {
   transform-origin: 50% 50%;
 }
 
-/* BUBBLES (CIRCLES) */
+/* BUBBLES */
 
 .bubble {
   position: absolute;
@@ -219,7 +219,7 @@ body {
   color: #bfdbfe;
 }
 
-/* LINKS BETWEEN NODES (STATIC LINES) */
+/* LINKS */
 
 .link-layer {
   position: absolute;
@@ -237,6 +237,7 @@ body {
 .detail-content {
   font-size: 0.85rem;
   line-height: 1.45;
+  margin-bottom: 0.75rem;
 }
 
 .detail-content h3 {
@@ -247,6 +248,88 @@ body {
   color: #93c5fd;
   text-decoration: underline;
   cursor: pointer;
+}
+
+/* EDITOR PANEL */
+
+.editor-panel {
+  margin-top: 0.5rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.35);
+  font-size: 0.8rem;
+}
+
+.editor-panel h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.9rem;
+}
+
+.editor-note {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.editor-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+}
+
+.editor-controls button {
+  flex: 1 1 48%;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 0.3rem;
+  border: 1px solid rgba(148, 163, 184, 0.8);
+  background-color: rgba(15, 23, 42, 0.95);
+  color: #e5e7eb;
+  cursor: pointer;
+}
+
+.editor-controls button:hover {
+  background-color: rgba(37, 99, 235, 0.4);
+}
+
+.editor-field {
+  margin-bottom: 0.45rem;
+}
+
+.editor-field label,
+.editor-label {
+  display: block;
+  font-size: 0.75rem;
+  margin-bottom: 0.15rem;
+}
+
+.editor-field input,
+.editor-field textarea {
+  width: 100%;
+  padding: 0.28rem 0.35rem;
+  border-radius: 0.3rem;
+  border: 1px solid rgba(75, 85, 99, 0.9);
+  background-color: #020617;
+  color: #e5e7eb;
+  font-size: 0.78rem;
+  resize: vertical;
+}
+
+.checkbox-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+}
+
+.checkbox-label input {
+  width: auto;
 }
 
 /* HIDDEN NODE DUMP AND TEXT MAP */
@@ -313,7 +396,7 @@ body {
   .sidebar-left,
   .sidebar-right {
     width: 100%;
-    height: 220px;
+    height: 240px;
     border-right: none;
     border-left: none;
     border-top: 1px solid rgba(148, 163, 184, 0.35);
